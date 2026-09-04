@@ -127,6 +127,7 @@ Completion bar for the MVP: `docs/roadmap.md`.
 | the simulator or a failure mode | `docs/golden-scenario.md`, `docs/architecture.md` |
 | metrics, logs, or traces | `docs/telemetry-contract.md` |
 | Grafana Cloud, MCP wiring, or credentials | `docs/grafana-setup.md` |
+| Google Cloud, IAM, or deployment targets | `docs/gcp-setup.md` |
 | an agent, its prompt, or its output schema | `docs/agents.md`, `agents/contracts.py`, `agents/state.py` |
 | impact, dependencies, or schedule logic | `docs/domain-model.md` |
 | actions, approval, the UI, deployment, or a design trade-off | `docs/architecture.md` |
