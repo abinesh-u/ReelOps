@@ -109,10 +109,12 @@ mcp-grafana -t streamable-http --disable-write --enabled-tools=incident,loki,onc
 `GRAFANA_MCP_URL` is then `http://localhost:8000/mcp`.
 
 **The env line is not decoration.** mcp-grafana is a separate process that reads
-process environment and never `.env`, and `.env` is not shell-sourceable here:
-`FIRESTORE_DATABASE=(default)` parses as a bash array assignment, and
-`OTEL_EXPORTER_OTLP_HEADERS` contains a space, so `set -a; . ./.env` fails on
-both. Prefix-scoped extraction with `cut -d= -f2-` preserves `=` inside values.
+process environment and never `.env`. And `.env` must not be shell-sourced:
+`set -a; . ./.env` exits **0** while silently truncating
+`OTEL_EXPORTER_OTLP_HEADERS` to `Authorization=Basic`, because the value
+contains a space and bash parses the remainder as a command. The credential
+vanishes with no error — measured, not theorised. Prefix-scoped extraction with
+`cut -d= -f2-` keeps both the spaces and the `=` inside values.
 
 Useful flags, as `mcp-grafana --help` reports them in 1.3.0:
 
