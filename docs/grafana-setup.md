@@ -60,28 +60,91 @@ Give it the **Viewer** role for the read path. Add the narrower write permission
 
 **Add service account token**, copy it once, and store it as `GRAFANA_SERVICE_ACCOUNT_TOKEN`.
 
-## 5. Run the MCP server
-
-Locally, with least privilege — read-only, and only the tool categories the golden path uses:
+Viewer may not be enough, and the failure is a 403 that surfaces later as an
+opaque MCP error. mcp-grafana queries through
+`/api/datasources/uid/<uid>/resources/api/v1/query`, which needs
+`datasources:read` — carried by the fixed role *Data sources reader*, not by
+basic Viewer. Probe it directly rather than reasoning about it:
 
 ```sh
-docker run --rm -p 8000:8000 \
-  -e GRAFANA_URL \
-  -e GRAFANA_SERVICE_ACCOUNT_TOKEN \
-  grafana/mcp-grafana -t streamable-http --disable-write
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $GRAFANA_SERVICE_ACCOUNT_TOKEN" \
+  "$GRAFANA_URL/api/datasources/uid/$GRAFANA_PROM_DATASOURCE_UID/resources/api/v1/query?query=up"
+```
+
+`200` and you are done. `403` — add the fixed role *Data sources reader* to the
+service account and probe again; Editor is the last resort. `401` is a bad
+token, `404` a wrong UID. Escalating the Grafana role does not widen what agents
+can do: `--disable-write` is the enforced boundary.
+
+## 4b. Pin the datasource UIDs
+
+`query_prometheus` and `query_loki_logs` both take `datasourceUid` as a
+**required** argument. Discovering it at run time would mean re-enabling the
+`datasource` category for one call per run, so the UIDs are pinned in `.env`
+instead.
+
+In Grafana: **Connections → Data sources**, open the Prometheus one, and read
+the UID out of the URL — `/connections/datasources/edit/<uid>`. Repeat for Loki.
+
+```sh
+GRAFANA_PROM_DATASOURCE_UID=<from the URL>
+GRAFANA_LOKI_DATASOURCE_UID=<from the URL>
+```
+
+## 5. Run the MCP server
+
+Locally, with least privilege — read-only, and only the tool categories the
+golden path uses. This is the canonical launch command; nothing else in the repo
+repeats it.
+
+```sh
+brew install mcp-grafana
+
+GRAFANA_URL="$(grep '^GRAFANA_URL=' .env | cut -d= -f2-)" \
+GRAFANA_SERVICE_ACCOUNT_TOKEN="$(grep '^GRAFANA_SERVICE_ACCOUNT_TOKEN=' .env | cut -d= -f2-)" \
+mcp-grafana -t streamable-http --disable-write --enabled-tools=incident,loki,oncall,prometheus
 ```
 
 `GRAFANA_MCP_URL` is then `http://localhost:8000/mcp`.
 
-Useful flags:
+**The env line is not decoration.** mcp-grafana is a separate process that reads
+process environment and never `.env`, and `.env` is not shell-sourceable here:
+`FIRESTORE_DATABASE=(default)` parses as a bash array assignment, and
+`OTEL_EXPORTER_OTLP_HEADERS` contains a space, so `set -a; . ./.env` fails on
+both. Prefix-scoped extraction with `cut -d= -f2-` preserves `=` inside values.
+
+Useful flags, as `mcp-grafana --help` reports them in 1.3.0:
 
 | Flag | Effect |
 | --- | --- |
-| `--disable-write` | Blocks dashboard, incident, and alert mutation |
-| `--disable-<category>` | Drops a category, e.g. `--disable-oncall` |
-| `--enabled-tools=a,b` | Opt into categories that are off by default |
+| `--disable-write` | Drops every create/update tool — see the note below on which |
+| `--disable-<category>` | Drops one category, e.g. `--disable-oncall` |
+| `--enabled-tools=a,b` | **Restricts** to the listed categories. It narrows; it does not opt in. The default already enables 23 |
+| `--disable-query` / `--enable-query` | Withhold or keep the raw-SQL query tools; ReelOps enables neither category |
+| `-t stdio\|sse\|streamable-http` | Transport. `-address` moves it off `localhost:8000` |
 | `--metrics` | Prometheus metrics for the server itself at `/metrics` |
 | `--debug` | Verbose HTTP logging when a tool call misbehaves |
+
+`agents/tool_budget.py` is the machine-readable copy of the budget, and it
+generates the `--enabled-tools` value above; a test asserts the two agree.
+
+**Why `sift` is not in that category list.** Measured on 1.3.0 with `sift`
+enabled: 31 tools without `--disable-write`, 25 with it. The six the flag
+removes are `create_incident`, `update_incident`, `add_activity_to_incident`,
+`update_alert_group`, `find_error_pattern_logs` and `find_slow_requests` — the
+last two because creating a Sift investigation is a write. So a read-only server
+serves neither, and the read path cannot use them however it is filtered. What
+remains of the category is read-only but unused, so the category stays off and
+log-pattern evidence comes from `query_loki_patterns` instead.
+
+**There is no Tempo category at all** — traces are reachable only through Sift
+and the Grafana UI, so Phase 4 must not reach for a Tempo tool.
+
+The command above serves **22 tools**, all seven budgeted read tools among them
+and no write tool. `list_alert_groups` and `get_alert_group` arrive as part of
+`oncall`; the mutating `update_alert_group` does not, which is what keeps
+alert-group mutation off per `AGENTS.md`.
 
 ADK adds a second lever on the client side: `McpToolset(..., tool_filter=[...])` restricts which of the server's tools an agent can see. Use both — the server flags are the boundary, the filter is what each agent is handed.
 
@@ -97,7 +160,26 @@ A health check proves the process booted, not that the setup works. Phase 3 is d
 curl -s localhost:8000/healthz          # expect: ok
 ```
 
-Then, with the simulator running and emitting:
+With the simulator running and emitting, the gate is a test rather than a
+command to eyeball:
+
+```sh
+REELOPS_LIVE_MCP=1 uv run pytest tests/test_grafana_live.py -q
+```
+
+It is opt-in by that flag, not by the presence of `GRAFANA_URL` — otherwise an
+ordinary `uv run pytest -q` would try to reach a server that is not running. If
+the flag is set and the configuration is incomplete, those tests **fail rather
+than skip**: a gate that quietly excuses itself is the same bug as an empty
+series reading as health.
+
+Five assertions stand between "the call worked" and "the telemetry is live": the
+call did not return an error envelope; the result is non-empty; a series carries
+at least two datapoints, so it is a stream and not one stale point; its `project`
+label matches `PROJECT_ID`, so it is our data and not a neighbour's; and its
+newest sample is under five minutes old.
+
+For a quick look at what the server exposes before running the gate:
 
 ```sh
 uv run python -c "
@@ -139,8 +221,12 @@ If Phase 6 has enabled the write path, confirm `create_incident` is reachable be
 
 | Symptom | Cause |
 | --- | --- |
-| Tool call returns an empty series | Telemetry is not arriving; check the OTLP exporter before the agent |
+| Tool call returns an empty series | Three causes, in this order: telemetry never arrived (check the OTLP exporter, not MCP — run `list_prometheus_metric_names` first); the simulator is not running now, so the points are older than the window; or the `project` label does not match `PROJECT_ID` |
 | Metric name not found | Suffix conversion — see the OTLP section of `telemetry-contract.md` |
 | `service` label missing | OTLP promotes `service.name` to the `job` label; query `job`, or set `service` as an explicit attribute |
+| LogQL filtering on `project` returns nothing | Metrics label it `project`; **logs label it `project_id`**. The two are not the same key |
+| 403 on a query, tools list fine | The service account lacks `datasources:read`. Run the probe in §4 and add the fixed role *Data sources reader* |
 | 401 from the MCP server | Token lacks the role, or `GRAFANA_URL` points at the wrong stack |
-| Tool missing from the list | Its category is off by default; add it with `--enabled-tools` |
+| Tool missing from the list | Its category is not in `--enabled-tools`, or it is a write tool and `--disable-write` is on. The flag narrows; it does not opt in |
+| MCP server starts but every call 401s | It reads process environment, never `.env`. Use the prefix-scoped launch line in §5 |
+| Port 8000 already in use | An earlier server is still running, or move this one with `-address localhost:8001` |

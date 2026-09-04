@@ -71,14 +71,17 @@ The workflow itself stays deterministic: Gemini reasons inside bounded stages.
 
 Least privilege — enable the smallest set that demonstrates genuine integration.
 
-**Read path**
+`agents/tool_budget.py` is the machine-readable copy, and it generates the server's `--enabled-tools` value; a test asserts it matches the launch command in `docs/grafana-setup.md`. The two must agree.
+
+**Read path** — served by `--enabled-tools=incident,loki,oncall,prometheus` with `--disable-write`
 
 ```text
 query_prometheus · list_prometheus_metric_names
-query_loki_logs · query_loki_patterns · find_error_pattern_logs
-find_slow_requests · Sift and Tempo tools where available
+query_loki_logs · query_loki_patterns
 list_incidents · get_incident · get_current_oncall_users
 ```
+
+No Sift, and no Tempo. `find_error_pattern_logs` and `find_slow_requests` each create a Sift investigation, so `--disable-write` strips them and a read-only server cannot serve them at all; mcp-grafana has no Tempo category in the first place. Log-pattern evidence comes from `query_loki_patterns`. Whether the Investigator should reach Sift through a separate write-capable instance is an open Phase 4 decision — see `docs/grafana-setup.md`.
 
 **Write path** — restricted to the response/operations boundary
 
@@ -86,7 +89,7 @@ list_incidents · get_incident · get_current_oncall_users
 create_incident · update_incident · add_activity_to_incident
 ```
 
-Alert-group mutations stay off unless the demo demonstrably needs them.
+Alert-group mutations stay off unless the demo demonstrably needs them; `--disable-write` already withholds `update_alert_group`.
 
 ---
 
@@ -129,7 +132,7 @@ Completion bar for the MVP: `docs/roadmap.md`.
 | the simulator or a failure mode | `docs/golden-scenario.md`, `docs/architecture.md` |
 | metrics, logs, or traces | `docs/telemetry-contract.md`, `telemetry/instruments.py` |
 | a dashboard or a reference PromQL/LogQL query | `dashboards/reelops-render.json` |
-| Grafana Cloud, MCP wiring, or credentials | `docs/grafana-setup.md` |
+| Grafana Cloud, MCP wiring, or credentials | `docs/grafana-setup.md`, `agents/tool_budget.py` |
 | Google Cloud, IAM, or deployment targets | `docs/gcp-setup.md` |
 | an agent, its prompt, or its output schema | `docs/agents.md`, `agents/contracts.py`, `agents/state.py` |
 | impact, dependencies, or schedule logic | `docs/domain-model.md` |

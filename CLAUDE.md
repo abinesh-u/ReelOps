@@ -23,6 +23,10 @@ SIM_SPEED=600 uv run python -m simulator # 600 sim-seconds per real second
 
 # Telemetry to stdout, no Grafana account needed
 TELEMETRY_ENABLED=true TELEMETRY_CONSOLE=true uv run python -m simulator
+
+# The live Grafana MCP gate. Needs mcp-grafana and the simulator both running;
+# the launch command for mcp-grafana lives in docs/grafana-setup.md.
+REELOPS_LIVE_MCP=1 uv run pytest tests/test_grafana_live.py -q
 ```
 
 `requirements.txt` is generated for the Cloud Run buildpack, never hand-edited. After changing `pyproject.toml`:
@@ -37,6 +41,9 @@ Ports: simulator `8090`, Action Gateway `8080`, Grafana MCP `8000`.
 
 - **The `[mcp]` extra on `google-adk` is load-bearing.** Bare `google-adk` does not declare `mcp`, so the resolver picks mcp 2.x, which dropped `ProgressFnT` and breaks `McpToolset` at import. The extra pins `mcp>=1.24,<2`.
 - **Packages have no `__init__.py`.** `[tool.uv] package = false` plus pytest's `pythonpath = ["."]` is what makes `simulator` and `agents` importable from the repo root. Adding a `[tool.setuptools]` packages list breaks test collection.
+- **`mcp-grafana` is a separate process that reads process environment, never `.env`** — and `.env` is not shell-sourceable here: `FIRESTORE_DATABASE=(default)` parses as a bash array assignment and `OTEL_EXPORTER_OTLP_HEADERS` contains a space, so `set -a; . ./.env` fails twice. Use the prefix-scoped launch line in `docs/grafana-setup.md`, which is the only place that command lives.
+- **No `asyncio_mode` is configured.** Async tests need an explicit `@pytest.mark.asyncio`, and async *fixtures* need `@pytest_asyncio.fixture` — a plain `@pytest.fixture` on an async fixture errors at setup rather than running.
+- **Settings tests must pass `_env_file=None`.** `GrafanaSettings` and `TelemetrySettings` read `.env`; once it is populated, a fail-loud test that omits this picks up real values and silently stops asserting anything.
 - `timeout` is not available in this shell.
 
 ## Code map
@@ -45,7 +52,7 @@ Ports: simulator `8090`, Action Gateway `8080`, Grafana MCP `8000`.
 | --- | --- |
 | `simulator/` | Phase 1, complete |
 | `telemetry/` | Phase 2, complete — OTLP metrics, logs and traces; live Grafana confirmation still pending credentials |
-| `agents/` | typed contracts and shared state only; no agent implementations yet |
+| `agents/` | typed contracts, shared state, and the Grafana MCP wiring (Phase 3); no agent implementations yet |
 | `evals/` | scenario definitions and scoring notes |
 | `action_gateway/`, `backend/`, `frontend/`, `infra/` | empty placeholders |
 
@@ -70,3 +77,15 @@ These span `config.py`, `engine.py`, `pipeline.py` and `snapshot.py`, and are ea
 - **Exported labels are `project`, `service`, `environment`, `job_type` and nothing else.** The snapshot carries per-worker entries; exporting them would be unbounded cardinality.
 - **Do not widen the simulator's 64-bit `trace_id`.** `getrandbits(128)` consumes a different amount of the seeded stream and destroys the calibration. The exporter prepends a per-process nonce instead.
 - **Anything the exporter drains needs a cursor.** The sample and event buffers are ring buffers; re-reading one exports every entry again.
+
+## Grafana MCP invariants
+
+`docs/grafana-setup.md` is the runbook; `AGENTS.md` sets the budget. These are the ways to widen privilege or hide a failure without noticing.
+
+- **The budget lives in `agents/tool_budget.py`, and the launch command lives in `docs/grafana-setup.md`.** The `--enabled-tools` value is generated from the same dict the per-agent filters are checked against, and a test asserts it appears verbatim in that doc. If that test fails, fix whichever side is wrong — do not loosen it to a set comparison, which is the only thing keeping the server boundary and the documented command in sync.
+- **Two levers, and both are load-bearing.** Server flags are the boundary; `tool_filter` is what each agent is handed. A filter alone leaves the tool reachable on the server.
+- **`--disable-write` withholds the two Sift search tools**, because creating a Sift investigation is a write. A read-only server serves neither `find_error_pattern_logs` nor `find_slow_requests`, however the client is filtered. There is no Tempo category at all.
+- **ADK returns MCP failures as data, not exceptions** — `except McpError: return {"error": ...}`, and a backend failure arrives as `{"content": [...], "isError": True}`. Anything calling a tool directly must go through `call_tool`, which raises on both shapes; otherwise a 403 reads as a successful call.
+- **An empty PromQL result is a well-formed success.** Use `require_series`, never the raw payload. This is the same trap as the histogram names: `render_job_duration_seconds` has no series under its bare name.
+- **Metrics label the project `project`; logs label it `project_id`.** LogQL filtering on `project` matches nothing, silently.
+- **The live gate is opt-in via `REELOPS_LIVE_MCP=1`, and fails rather than skips when set with incomplete config.** Keying it off the presence of `GRAFANA_URL` would make every ordinary test run reach for a server that is not up.
