@@ -90,3 +90,25 @@ def test_no_route_serves_ground_truth(client: TestClient) -> None:
     paths = {route.path for route in client.app.routes}
     assert not [p for p in paths if "eval" in p or "truth" in p]
     assert paths >= {"/healthz", "/sim/state", "/sim/reset", "/sim/recover"}
+
+
+class RecordingEmitter:
+    """Stands in for TelemetryEmitter to prove the lifespan actually wires it."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def start(self) -> None:
+        self.calls.append("start")
+
+    async def stop(self) -> None:
+        self.calls.append("stop")
+
+
+def test_lifespan_starts_and_stops_telemetry() -> None:
+    emitter = RecordingEmitter()
+    app = create_app(SimulationEngine(SimulatorSettings()), autorun=False, telemetry=emitter)
+    with TestClient(app) as client:
+        client.get("/healthz")
+        assert emitter.calls == ["start"]
+    assert emitter.calls == ["start", "stop"]

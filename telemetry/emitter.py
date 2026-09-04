@@ -127,7 +127,15 @@ class TelemetryEmitter:
 
     async def _loop(self, interval: float) -> None:
         while True:
-            self.record_once()
+            try:
+                self.record_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # A dead task would stop telemetry while the simulator kept
+                # ticking and /sim/state kept answering, and Grafana would go
+                # flat — which reads as a healthy idle farm.
+                logger.exception("telemetry record failed; continuing")
             await asyncio.sleep(interval)
 
     # -- recording --------------------------------------------------------
