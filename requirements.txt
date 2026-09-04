@@ -14,9 +14,9 @@ annotated-types==0.8.0
     # via pydantic
 anyio==4.15.0
     # via
+    #   google-adk
     #   google-genai
     #   httpx
-    #   httpx2
     #   mcp
     #   sse-starlette
     #   starlette
@@ -97,28 +97,23 @@ grpcio-status==1.83.1
 h11==0.16.0
     # via
     #   httpcore
-    #   httpcore2
     #   uvicorn
 httpcore==1.0.9
     # via httpx
-httpcore2==2.12.0 ; sys_platform != 'emscripten'
-    # via httpx2
 httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via
     #   google-adk
     #   google-genai
+    #   mcp
     #   reelops
-httpx2==2.12.0
+httpx-sse==0.4.3
     # via mcp
-httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscripten'
-    # via httpx2
 idna==3.19
     # via
     #   anyio
     #   httpx
-    #   httpx2
     #   requests
     #   yarl
 joserfc==1.7.5
@@ -129,10 +124,8 @@ jsonschema==4.26.0
     #   mcp
 jsonschema-specifications==2025.9.1
     # via jsonschema
-mcp==2.1.1
-    # via reelops
-mcp-types==2.1.1
-    # via mcp
+mcp==1.29.1
+    # via google-adk
 multidict==6.7.1
     # via
     #   aiohttp
@@ -140,7 +133,6 @@ multidict==6.7.1
 opentelemetry-api==1.42.1
     # via
     #   google-adk
-    #   mcp
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
@@ -170,8 +162,6 @@ opentelemetry-semantic-conventions==0.63b1
     # via opentelemetry-sdk
 packaging==26.3
     # via google-adk
-prometheus-client==0.26.0
-    # via reelops
 propcache==0.5.2
     # via
     #   aiohttp
@@ -200,13 +190,14 @@ pydantic==2.13.5
     #   google-adk
     #   google-genai
     #   mcp
-    #   mcp-types
     #   pydantic-settings
     #   reelops
 pydantic-core==2.46.5
     # via pydantic
 pydantic-settings==2.15.0
-    # via reelops
+    # via
+    #   mcp
+    #   reelops
 pyjwt==2.13.0
     # via mcp
 python-dotenv==1.2.3
@@ -253,10 +244,6 @@ tenacity==9.1.4
     # via
     #   google-adk
     #   google-genai
-truststore==0.10.4 ; sys_platform != 'emscripten'
-    # via
-    #   httpcore2
-    #   httpx2
 typing-extensions==4.16.0
     # via
     #   aiohttp
@@ -266,9 +253,7 @@ typing-extensions==4.16.0
     #   google-adk
     #   google-genai
     #   grpcio
-    #   httpx2
     #   mcp
-    #   mcp-types
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-exporter-otlp-proto-http

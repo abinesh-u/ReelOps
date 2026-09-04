@@ -60,3 +60,14 @@ editorial.review → vfx.render_request → render.enqueue → worker.render →
 ```
 
 Spans carry bounded attributes: service name, job type, scene ID, outcome.
+
+## OTLP naming
+
+All three signals ship over OTLP (`grafana-setup.md`). Grafana Cloud converts OTLP metric names to Prometheus names on ingest, and two conversions decide whether the names above are queryable:
+
+- **`_total` on counters.** A monotonic sum gets `_total` appended unless the name already ends in it. `render_jobs_failed_total` is therefore correct as written — the suffix is not doubled.
+- **Unit suffixes.** A unit suffix is appended unless the name already contains it. Name instruments exactly as listed above and leave the instrument `unit` unset; `render_job_duration_seconds` with unit `s` risks arriving as `render_job_duration_seconds_seconds`.
+
+Resource attributes do not become metric labels. `service.name` and `service.instance.id` are promoted to `job` and `instance`; everything else lands on `target_info`, joinable with `metric * on(job, instance) group_left(label) target_info`. Emit `project`, `service`, `environment`, and `job_type` as explicit metric attributes so agent queries can filter on them directly.
+
+Verify a name in Grafana before writing an agent query against it. A renamed metric fails as an empty result, which reads like a healthy system rather than a broken query.

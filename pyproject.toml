@@ -5,10 +5,9 @@ description = "ReelOps — Gemini + Google ADK agentic production reliability pl
 requires-python = ">=3.11"
 dependencies = [
     # Agent orchestration and reasoning
-    "google-adk>=2.8.0",
+    # [mcp] extra pins mcp>=1.24,<2; ADK's toolset breaks on mcp 2.x
+    "google-adk[mcp]>=2.8.0",
     "google-genai>=2.22.0",
-    # Grafana MCP transport (ADK MCPToolset)
-    "mcp>=2.1.1",
     # Production-domain plane
     "google-cloud-firestore>=2.30.0",
     # API / action gateway surface
@@ -18,8 +17,7 @@ dependencies = [
     # Typed contracts and fail-loud configuration
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
-    # Simulator telemetry
-    "prometheus-client>=0.26.0",
+    # Simulator telemetry (OTLP only; see docs/grafana-setup.md)
     "opentelemetry-sdk>=1.39",
     "opentelemetry-exporter-otlp>=1.39",
 ]
