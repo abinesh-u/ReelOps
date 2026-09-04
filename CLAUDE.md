@@ -15,8 +15,8 @@ uv sync --extra dev                      # install
 uv run pytest -q                         # full suite
 uv run pytest tests/test_simulator.py::test_determinism    # one test
 uv run pytest -k degradation             # by name
-uv run ruff check simulator tests
-uv run ruff format simulator tests
+uv run ruff check simulator telemetry agents tests
+uv run ruff format simulator telemetry agents tests
 
 uv run python -m simulator               # simulator + control API on :8090
 SIM_SPEED=600 uv run python -m simulator # 600 sim-seconds per real second
@@ -51,8 +51,8 @@ Ports: simulator `8090`, Action Gateway `8080`, Grafana MCP `8000`.
 | Directory | State |
 | --- | --- |
 | `simulator/` | Phase 1, complete |
-| `telemetry/` | Phase 2, complete — OTLP metrics, logs and traces; live Grafana confirmation still pending credentials |
-| `agents/` | typed contracts, shared state, and the Grafana MCP wiring (Phase 3); no agent implementations yet |
+| `telemetry/` | Phase 2, complete — OTLP metrics, logs and traces, confirmed live in Grafana Cloud |
+| `agents/` | Phase 3, complete — typed contracts, shared state, and the Grafana MCP wiring; no agent implementations yet |
 | `evals/` | scenario definitions and scoring notes |
 | `action_gateway/`, `backend/`, `frontend/`, `infra/` | empty placeholders |
 
@@ -84,7 +84,8 @@ These span `config.py`, `engine.py`, `pipeline.py` and `snapshot.py`, and are ea
 
 - **The budget lives in `agents/tool_budget.py`, and the launch command lives in `docs/grafana-setup.md`.** The `--enabled-tools` value is generated from the same dict the per-agent filters are checked against, and a test asserts it appears verbatim in that doc. If that test fails, fix whichever side is wrong — do not loosen it to a set comparison, which is the only thing keeping the server boundary and the documented command in sync.
 - **Two levers, and both are load-bearing.** Server flags are the boundary; `tool_filter` is what each agent is handed. A filter alone leaves the tool reachable on the server.
-- **`--disable-write` withholds the two Sift search tools**, because creating a Sift investigation is a write. A read-only server serves neither `find_error_pattern_logs` nor `find_slow_requests`, however the client is filtered. There is no Tempo category at all.
+- **`--disable-write` withholds the two Sift search tools**, because creating a Sift investigation is a write. A read-only server serves neither `find_error_pattern_logs` nor `find_slow_requests`, however the client is filtered.
+- **Proxied tools exist only against a real Grafana Cloud stack, and `--enabled-tools` does not reach them.** Nine `tempo_*` tools are relayed from Cloud's own MCP server: the read server exposes 22 tools locally and 31 against Cloud. The only server-side lever is `--disable-proxied`, all-or-nothing, so for the two the investigator uses the client-side `tool_filter` is the *only* narrowing. Measure the tool list against the real stack, never against a local Grafana.
 - **ADK returns MCP failures as data, not exceptions** — `except McpError: return {"error": ...}`, and a backend failure arrives as `{"content": [...], "isError": True}`. Anything calling a tool directly must go through `call_tool`, which raises on both shapes; otherwise a 403 reads as a successful call.
 - **An empty PromQL result is a well-formed success.** Use `require_series`, never the raw payload. This is the same trap as the histogram names: `render_job_duration_seconds` has no series under its bare name.
 - **Metrics label the project `project`; logs label it `project_id`.** LogQL filtering on `project` matches nothing, silently.

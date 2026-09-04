@@ -161,6 +161,44 @@ async def test_render_queue_depth_returns_a_live_series(
 
 
 @pytest.mark.asyncio
+async def test_investigator_can_fetch_a_trace(settings: GrafanaSettings) -> None:
+    """The third leg of the evidence chain: metrics, logs, and now spans.
+
+    The tempo_* tools are proxied from Grafana Cloud's own MCP server, so they
+    appear only against a real stack — a local Grafana serves none of them.
+    That makes this the one budget entry no offline test can cover.
+    """
+    toolset = grafana_toolset("investigator", settings)
+    try:
+        found = await call_tool(
+            toolset,
+            "tempo_traceql-search",
+            {
+                "datasourceUid": settings.grafana_tempo_datasource_uid,
+                "query": '{resource.service.name="reelops-simulator"}',
+            },
+        )
+        traces = found.get("traces") if isinstance(found, dict) else None
+        assert traces, "no simulator traces in Tempo; check the span exporter"
+
+        trace_id = traces[0]["traceID"]
+        detail = await call_tool(
+            toolset,
+            "tempo_get-trace",
+            {"datasourceUid": settings.grafana_tempo_datasource_uid, "trace_id": trace_id},
+        )
+    finally:
+        await toolset.close()
+
+    logger.info("fetched trace %s (%d found)", trace_id, len(traces))
+    assert len(trace_id) == 32, (
+        f"expected a 128-bit trace id, got {len(trace_id)} hex chars — the "
+        "exporter's per-process nonce prepends 64 bits to the simulator's own id"
+    )
+    assert detail, "tempo_get-trace returned nothing for a trace search had just listed"
+
+
+@pytest.mark.asyncio
 async def test_simulator_logs_reach_loki(settings: GrafanaSettings) -> None:
     """The stream selector only — the part that does not depend on structured metadata."""
     toolset = grafana_toolset("investigator", settings)

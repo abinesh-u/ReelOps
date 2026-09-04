@@ -148,11 +148,29 @@ serves neither, and the read path cannot use them however it is filtered. What
 remains of the category is read-only but unused, so the category stays off and
 log-pattern evidence comes from `query_loki_patterns` instead.
 
-**There is no Tempo category at all** — traces are reachable only through Sift
-and the Grafana UI, so Phase 4 must not reach for a Tempo tool.
+**Tempo arrives by a different route: proxied tools.** There is no `tempo`
+category and `--enabled-tools` cannot select one, but against a **real Grafana
+Cloud stack** mcp-grafana relays nine read-only `tempo_*` tools from Cloud's own
+MCP server — `traceql-search`, `get-trace`, `trace-diff`, TraceQL metrics, the
+attribute lookups and two docs tools. They do not appear against a local
+Grafana, so measuring the tool list offline understates it:
 
-The command above serves **22 tools**, all seven budgeted read tools among them
-and no write tool. `list_alert_groups` and `get_alert_group` arrive as part of
+| Started against | Tools served |
+| --- | --- |
+| a local Grafana | 22 |
+| a Grafana Cloud stack | 31 |
+| Cloud, plus `--disable-proxied` | 22 |
+
+The budget takes two of them — `tempo_traceql-search` and `tempo_get-trace`,
+handed to the investigator alone — which is why the command above does **not**
+pass `--disable-proxied`. Be clear about what that costs: `--disable-proxied` is
+all-or-nothing, so the other seven stay reachable on the server and the
+per-agent `tool_filter` is the only thing narrowing them. Everything proxied
+here is read-only and `--disable-write` still applies, so the exposure is extra
+read surface rather than any new mutation.
+
+Of the 22 non-proxied tools, all seven budgeted read tools are present and no
+write tool is. `list_alert_groups` and `get_alert_group` arrive as part of
 `oncall`; the mutating `update_alert_group` does not, which is what keeps
 alert-group mutation off per `AGENTS.md`.
 

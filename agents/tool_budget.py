@@ -38,6 +38,22 @@ READ_TOOLS_BY_CATEGORY: dict[str, tuple[str, ...]] = {
     "prometheus": ("query_prometheus", "list_prometheus_metric_names"),
 }
 
+# Tools mcp-grafana relays from Grafana Cloud's own MCP servers. They appear
+# only against a real Cloud stack, never against a local Grafana, which is why
+# they are easy to miss when developing offline.
+#
+# They are NOT selectable through --enabled-tools. The only server-side lever is
+# --disable-proxied, which is all-or-nothing, so for these two the client-side
+# tool_filter is the only narrowing and the other seven tempo_* tools stay
+# reachable on the server. That is a weaker boundary than the rest of the budget
+# gets, and it is accepted deliberately: every proxied tempo tool is read-only,
+# --disable-write still applies, and the investigator's evidence chain is worth
+# more than the seven unused tools cost.
+PROXIED_READ_TOOLS: tuple[str, ...] = (
+    "tempo_traceql-search",
+    "tempo_get-trace",
+)
+
 # Phase 6 only, and only from a second server started without --disable-write.
 # No entry here may appear in AGENT_TOOLS while the read path is the only one.
 WRITE_TOOLS: tuple[str, ...] = (
@@ -46,7 +62,9 @@ WRITE_TOOLS: tuple[str, ...] = (
     "add_activity_to_incident",
 )
 
-READ_TOOLS: tuple[str, ...] = tuple(sorted(chain.from_iterable(READ_TOOLS_BY_CATEGORY.values())))
+READ_TOOLS: tuple[str, ...] = tuple(
+    sorted(chain(chain.from_iterable(READ_TOOLS_BY_CATEGORY.values()), PROXIED_READ_TOOLS))
+)
 
 # Sorted so the generated string is stable and can be asserted verbatim against
 # the launch command in docs/grafana-setup.md.
@@ -57,7 +75,15 @@ ENABLED_TOOLS_FLAG: str = "--enabled-tools=" + ",".join(sorted(READ_TOOLS_BY_CAT
 AGENT_TOOLS: dict[AgentName, tuple[str, ...]] = {
     "supervisor": (),
     "sentinel": ("query_prometheus", "list_prometheus_metric_names"),
-    "investigator": ("query_prometheus", "query_loki_logs", "query_loki_patterns"),
+    # The only agent given traces: metrics -> logs -> spans is its evidence
+    # chain, and a hypothesis may cite a span only if it fetched one.
+    "investigator": (
+        "query_prometheus",
+        "query_loki_logs",
+        "query_loki_patterns",
+        "tempo_traceql-search",
+        "tempo_get-trace",
+    ),
     "impact": ("query_prometheus",),
     "response": (
         "query_prometheus",

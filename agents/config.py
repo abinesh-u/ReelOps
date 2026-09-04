@@ -34,6 +34,9 @@ class GrafanaSettings(BaseSettings):
     # `datasource` category for one call per run.
     grafana_prom_datasource_uid: str = ""
     grafana_loki_datasource_uid: str = ""
+    # Only the investigator needs this one, so it is not part of the client
+    # check: an agent that never queries traces should still start without it.
+    grafana_tempo_datasource_uid: str = ""
 
     # The `project` label every exported metric carries; queries filter on it.
     project_id: str = "reelops-demo"

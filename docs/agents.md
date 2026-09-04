@@ -26,28 +26,31 @@ Telemetry reads only. Emits anomaly flag, severity, affected service/signal, obs
 Evidence sequence:
 
 ```text
-metric anomaly → service health → log/error patterns → slow renders → related events → root-cause hypothesis
+metric anomaly → service health → log/error patterns → slow renders → traces → root-cause hypothesis
 ```
 
 Every hypothesis cites the evidence that supports it.
 
-**The slow-render step is PromQL, not Sift.** `find_slow_requests` and
-`find_error_pattern_logs` each create a Sift investigation, so `--disable-write`
-withholds them and a read-only server cannot serve them however the client is
-filtered; mcp-grafana has no Tempo category at all. The investigator's three
-tools are `query_prometheus`, `query_loki_logs` and `query_loki_patterns`. So:
+The investigator holds five tools — `query_prometheus`, `query_loki_logs`,
+`query_loki_patterns`, `tempo_traceql-search` and `tempo_get-trace` — and it is
+the only agent given traces. So:
 
 - log and error patterns come from `query_loki_patterns`
 - slow renders come from the p95 of `render_job_duration_seconds_bucket`, the
   same query the dashboard's duration panel uses
+- traces come from a TraceQL search, then a fetch of one trace by id
 
-Traces are still exported and still correlate — `telemetry/spans.py` emits the
-`vfx.render_request → render.enqueue → worker.render → storage.write` chain to
-Tempo, and log records carry a native `trace_id`. They are reachable in the
-Grafana UI, and so remain available to *show* in the demo; they are simply not
-reachable as an MCP tool call, so no hypothesis may cite a span the agent did
-not actually fetch. Whether to give the investigator Sift through a separate
-write-capable instance is an open Phase 4 decision — see `grafana-setup.md`.
+**The slow-render step is PromQL, not Sift.** `find_slow_requests` and
+`find_error_pattern_logs` each create a Sift investigation, so `--disable-write`
+withholds them and a read-only server cannot serve them however the client is
+filtered.
+
+**The trace step is real, and verified end to end.** `telemetry/spans.py` emits
+the `vfx.render_request → render.enqueue → worker.render → storage.write` chain
+to Tempo, log records carry a native `trace_id`, and `tempo_traceql-search`
+against `{resource.service.name="reelops-simulator"}` returns those spans
+through MCP. A hypothesis may still cite only a span the agent actually
+fetched — the tool exists, so there is no excuse for inferring one.
 
 ### `impact` — What does this mean for production?
 
