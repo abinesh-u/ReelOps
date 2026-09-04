@@ -33,12 +33,11 @@ OTEL_SERVICE_NAME=reelops-simulator
 ```
 
 The tile tells Python users to write `Basic%20` rather than `Basic `. **Either
-works here**, and the wizard accepts both: `telemetry/providers.py` parses the
-value with `parse_env_headers(..., liberal=True)`, which URL-decodes `%20` back
-to a space, and the exporters are handed the parsed headers explicitly rather
-than reading the environment variable themselves. Prefer the `%20` form anyway
-— it survives any shell or extraction step that would otherwise split on the
-space.
+works here**: `telemetry/providers.py` parses the value with
+`parse_env_headers(..., liberal=True)`, which URL-decodes `%20` back to a space,
+and the exporters are handed the parsed headers explicitly rather than reading
+the environment variable themselves. Prefer the `%20` form anyway — it survives
+any shell or extraction step that would otherwise split on the space.
 
 `OTEL_EXPORTER_OTLP_HEADERS` carries a credential. It belongs in `.env` and Secret Manager, never in a commit.
 

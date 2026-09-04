@@ -66,6 +66,5 @@ class GrafanaSettings(BaseSettings):
         missing = [name for name, value in values.items() if not value.strip()]
         if missing:
             raise GrafanaConfigError(
-                f"{problem}: {', '.join(missing)} is empty. "
-                f"Run infra/setup-grafana.sh, or see {_SETUP_DOC}."
+                f"{problem}: {', '.join(missing)} is empty. See {_SETUP_DOC}."
             )
