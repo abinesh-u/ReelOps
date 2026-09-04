@@ -1,0 +1,9 @@
+[project]
+name = "reelops"
+version = "0.1.0"
+description = "ReelOps — Gemini + Google ADK agentic production reliability platform for film-production operations"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]

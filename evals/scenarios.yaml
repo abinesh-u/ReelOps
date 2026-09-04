@@ -1,0 +1,15 @@
+scenarios:
+  - id: render-worker-degradation-001
+    fault: render_worker_degradation
+    ground_truth:
+      root_cause: worker_degradation
+      affected_scene: scene_42
+      target_deadline: editorial_review_scene_42
+    expected_agent_behaviors:
+      - detect_anomaly
+      - correlate_metrics_logs_traces
+      - identify_root_cause
+      - predict_downstream_impact
+      - recommend_bounded_action
+      - require_human_approval
+      - verify_recovery
