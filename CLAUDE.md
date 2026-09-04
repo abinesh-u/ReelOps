@@ -20,6 +20,9 @@ uv run ruff format simulator tests
 
 uv run python -m simulator               # simulator + control API on :8090
 SIM_SPEED=600 uv run python -m simulator # 600 sim-seconds per real second
+
+# Telemetry to stdout, no Grafana account needed
+TELEMETRY_ENABLED=true TELEMETRY_CONSOLE=true uv run python -m simulator
 ```
 
 `requirements.txt` is generated for the Cloud Run buildpack, never hand-edited. After changing `pyproject.toml`:
@@ -40,10 +43,11 @@ Ports: simulator `8090`, Action Gateway `8080`, Grafana MCP `8000`.
 
 | Directory | State |
 | --- | --- |
-| `simulator/` | Phase 1, complete — the only substantial implementation so far |
+| `simulator/` | Phase 1, complete |
+| `telemetry/` | Phase 2, complete — OTLP metrics, logs and traces; live Grafana confirmation still pending credentials |
 | `agents/` | typed contracts and shared state only; no agent implementations yet |
 | `evals/` | scenario definitions and scoring notes |
-| `action_gateway/`, `backend/`, `frontend/`, `telemetry/`, `infra/` | empty placeholders |
+| `action_gateway/`, `backend/`, `frontend/`, `infra/` | empty placeholders |
 
 ## Simulator invariants
 
@@ -55,3 +59,14 @@ These span `config.py`, `engine.py`, `pipeline.py` and `snapshot.py`, and are ea
 - **Faults change only worker speed and availability.** Queue growth, timeouts and throughput collapse must stay consequences of the simulation. Writing a demo figure into the pipeline defeats the point of the Sentinel detecting it.
 - **Tuning constants live in `SimulatorSettings`, and they are calibrated.** Scene 42 must make its 16:00 deadline healthy and miss it faulted, on every seed. After changing any of them, re-run the multi-seed sweep — the test only asserts the sign of the margin, so it will not catch a calibration that has quietly gone one-sided.
 - `tests/test_failure_injector.py` predates the engine and pins the public shape: `FailureInjector()` stays constructible with no arguments.
+
+## Telemetry invariants
+
+`docs/telemetry-contract.md` is the authority; these are the ways to break it quietly.
+
+- **`telemetry/` imports `simulator/`, never the reverse.** `create_app` takes an emitter matching a structural protocol, so no OpenTelemetry import reaches the simulator's path and console/in-memory adapters stay off it.
+- **Never record from an observable-instrument callback.** The SDK runs those on the metric reader's thread, and `build_snapshot` iterates structures `tick()` mutates. Recording is pushed from an asyncio task in the simulator's own loop.
+- **The two duration metrics are histograms**, so neither exists as a series under its own name. PromQL against the bare name returns empty, which reads as a healthy system.
+- **Exported labels are `project`, `service`, `environment`, `job_type` and nothing else.** The snapshot carries per-worker entries; exporting them would be unbounded cardinality.
+- **Do not widen the simulator's 64-bit `trace_id`.** `getrandbits(128)` consumes a different amount of the seeded stream and destroys the calibration. The exporter prepends a per-process nonce instead.
+- **Anything the exporter drains needs a cursor.** The sample and event buffers are ring buffers; re-reading one exports every entry again.

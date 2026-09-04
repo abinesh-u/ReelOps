@@ -46,6 +46,38 @@ degraded rates by luck of sampling.
 raises it even when the job eventually succeeds. Its mean moves little under
 partial degradation; query the p95, which is where the signal lives.
 
+### Histograms — the bare name carries no series
+
+`render_job_duration_seconds` and `vfx_delivery_latency_seconds` are exported as
+histograms, because a p95 cannot be derived from a gauge. A histogram publishes
+three derived series and **not** a series under its own name:
+
+```text
+render_job_duration_seconds_bucket{le="..."} · _sum · _count
+vfx_delivery_latency_seconds_bucket{le="..."} · _sum · _count
+```
+
+Querying the bare name returns nothing, which reads as a healthy system rather
+than a wrong query. Ask for the quantile instead:
+
+```promql
+histogram_quantile(0.95, sum by (le) (rate(render_job_duration_seconds_bucket[5m])))
+```
+
+Bucket boundaries are set explicitly in `telemetry/instruments.py`; the SDK
+defaults stop at 10 seconds and then jump in decades, which puts every render
+in one bucket. Time on a worker is capped by the 1800s timeout and clusters
+around the 900s nominal, so its boundaries are fine-grained between the two —
+with one just above the healthy maximum of ~1090s, so the shoulder between
+healthy and degraded work is representable at all. Delivery latency adds queue
+wait and retries on top and runs to hours once capacity is short, so it gets a
+wider scale.
+
+p95 is a supporting signal, not a decisive one: only a quarter of the farm
+degrades, so most completions still come from healthy workers and the top 5% is
+a handful of samples. Queue depth, availability and the log events separate
+cleanly where it does not.
+
 `editorial_blocked_scenes` counts scenes whose review cannot start because
 upstream shots are unfinished. That is a state fact, not a deadline judgement.
 
@@ -86,6 +118,24 @@ editorial.review → vfx.render_request → render.enqueue → worker.render →
 ```
 
 Spans carry bounded attributes: service name, job type, scene ID, outcome.
+
+## Wall-clock timestamps, sim time as data
+
+The simulator's clock starts months away from now (`docs/architecture.md`), and
+Mimir, Loki and Tempo all reject samples that far outside their ingestion
+window. Every exported record is therefore stamped with **real** wall-clock
+time; sim time rides along as the `sim_time` log attribute. At `SIM_SPEED=60`
+the 90 sim-minute window becomes a 90-second window on a Grafana graph.
+
+Spans are compressed the same way, so a 900 sim-second render is a 15-second
+span with `render.sim_duration_seconds` carrying the true figure. Metrics, logs
+and traces therefore share one time axis, which is what lets an investigation
+line a slow span up against a queue spike. Absolute span latency is not
+realistic; relative latency is.
+
+One consequence: simulator state is reproducible under a seed, but the exported
+*series* is not, because export cadence is wall-clock. Nothing should assert
+series equality across runs.
 
 ## OTLP naming
 

@@ -101,12 +101,13 @@ Full detail: `docs/golden-scenario.md`. Ideas beyond this loop — more incident
 
 ## Phases
 
-Build in this order. **Current: Phase 1.**
+Build in this order. **Current: Phase 3.**
 
 ```text
-1. Simulator          ingest / VFX / render / editorial, render-worker degradation first  ← current
-2. Telemetry          metrics, logs, traces; healthy vs degraded visibly differ in Grafana
-3. Grafana wiring     validate MCP connectivity with a minimal tool-calling test
+1. Simulator          ingest / VFX / render / editorial, render-worker degradation first  ← done
+2. Telemetry          metrics, logs, traces; healthy vs degraded visibly differ in Grafana  ← code done,
+                      live confirmation waits on a Grafana stack (docs/grafana-setup.md)
+3. Grafana wiring     validate MCP connectivity with a minimal tool-calling test  ← current
 4. Sentinel + Investigator    anomaly → evidence → root cause
 5. Impact Analyst     root cause → downstream production risk
 6. Response + approval        bounded actions behind the Action Gateway

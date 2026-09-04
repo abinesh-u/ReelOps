@@ -4,10 +4,12 @@ Held in a bounded ring buffer so a long run cannot grow without limit, with
 cumulative counters kept alongside so eviction never rewrites history.
 """
 
-from collections import Counter, deque
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
+
+from simulator.streams import BoundedStream
 
 # Event vocabulary from docs/telemetry-contract.md.
 RENDER_STARTED = "render_started"
@@ -42,7 +44,7 @@ class SimEvent:
 
 class EventLog:
     def __init__(self, capacity: int = 2000) -> None:
-        self._events: deque[SimEvent] = deque(maxlen=capacity)
+        self._events: BoundedStream[SimEvent] = BoundedStream(capacity, name="event_log")
         self._counts: Counter[str] = Counter()
 
     def record(self, event: SimEvent) -> None:
@@ -50,9 +52,16 @@ class EventLog:
         self._counts[event.event] += 1
 
     def recent(self, limit: int = 50) -> list[SimEvent]:
-        if limit >= len(self._events):
-            return list(self._events)
-        return list(self._events)[-limit:]
+        events = list(self._events)
+        return events if limit >= len(events) else events[-limit:]
+
+    def since(self, cursor: int) -> tuple[list[SimEvent], int]:
+        """Events recorded after `cursor`, for the telemetry exporter."""
+        return self._events.since(cursor)
+
+    @property
+    def recorded_total(self) -> int:
+        return self._events.recorded_total
 
     def count(self, event_name: str) -> int:
         """Cumulative occurrences, including entries evicted from the buffer."""

@@ -89,3 +89,39 @@ class Scene:
     review_status: str = "pending"
     shots: list[str] = field(default_factory=list)
     ready_at: datetime | None = None
+    review_started_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class JobAttempt:
+    """One worker's run at a job, kept after the job object is released.
+
+    `RenderJob` is mutated and reused across retries, so the timeline a trace
+    needs is gone by the time the exporter looks. This is the durable record:
+    enough to build the canonical span chain and nothing more.
+    """
+
+    job_id: str
+    scene_id: str
+    shot_id: str | None
+    worker_id: str
+    trace_id: str
+    outcome: str
+    attempt: int
+    frames: int
+    queued_at: datetime
+    started_at: datetime
+    ended_at: datetime
+    # Sim seconds the worker spent on this attempt.
+    duration_seconds: float
+
+
+@dataclass(frozen=True)
+class SceneReview:
+    """A finished editorial review, kept for the `editorial.review` span."""
+
+    scene_id: str
+    ready_at: datetime
+    started_at: datetime
+    completed_at: datetime
+    shots: int

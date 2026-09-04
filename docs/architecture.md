@@ -56,6 +56,35 @@ Every seed makes the window healthy and misses it faulted. The deadline test ass
 
 Two limitations to carry into Phase 4. The backlog drains over the first ~80 sim-minutes, so the healthy baseline falls rather than sitting flat — detection should compare against the trajectory, not a fixed threshold. And `render_throughput_fps` is quantised by frames-per-job, so at a single tick two runs can tie; the queue, duration and log signals separate cleanly where it does not.
 
+### `telemetry/`
+
+Turns `SimulationSnapshot`, the event log and per-job timelines into OTLP
+metrics, logs and traces. It imports `simulator/`; nothing in `simulator/`
+imports it. `create_app` takes an optional emitter matching a small structural
+protocol, so the simulator runs unchanged with telemetry off and no
+OpenTelemetry import sits on its path.
+
+**Recording is pushed from the simulation's own event loop.** The obvious
+alternative — observable instruments whose callbacks the SDK invokes — runs
+those callbacks on the metric reader's thread, where they would iterate the
+queue deque and the scenes dict while `tick()` mutates both. The failure is an
+intermittent `RuntimeError` on a background thread. An asyncio task in the same
+loop awaits only between records and cannot interleave with a tick.
+
+Each buffer the exporter reads from is a `BoundedStream` with a monotonic
+`recorded_total`, so a consumer drains by cursor rather than re-reading a ring
+buffer and exporting every sample twice. Falling further behind than the buffer
+is deep logs a warning instead of quietly under-reporting.
+
+Timestamps are wall-clock and sim durations are compressed by `SIM_SPEED` — see
+`telemetry-contract.md` for why, and for what that costs. Traces reuse the
+simulator's own `trace_id`, widened to 128 bits with a per-process nonce so
+re-running a seed produces fresh traces rather than merging into the last take.
+
+Configuration is fail-loud: `TELEMETRY_ENABLED=true` with no OTLP endpoint
+raises before the port opens, because an exporter pointed at nothing accepts
+every record and drops it. `TELEMETRY_CONSOLE=true` prints locally instead.
+
 ### `action_gateway/`
 
 The bounded mutation boundary between the Response agent and the simulator:
