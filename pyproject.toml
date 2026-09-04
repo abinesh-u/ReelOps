@@ -3,7 +3,42 @@ name = "reelops"
 version = "0.1.0"
 description = "ReelOps — Gemini + Google ADK agentic production reliability platform for film-production operations"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    # Agent orchestration and reasoning
+    "google-adk>=2.8.0",
+    "google-genai>=2.22.0",
+    # Grafana MCP transport (ADK MCPToolset)
+    "mcp>=2.1.1",
+    # Production-domain plane
+    "google-cloud-firestore>=2.30.0",
+    # API / action gateway surface
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+    "httpx>=0.28.1",
+    # Typed contracts and fail-loud configuration
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    # Simulator telemetry
+    "prometheus-client>=0.26.0",
+    "opentelemetry-sdk>=1.39",
+    "opentelemetry-exporter-otlp>=1.39",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.6",
+]
+
+[tool.uv]
+# Deployed as source to Cloud Run, not installed as a distribution.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

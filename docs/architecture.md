@@ -79,3 +79,11 @@ API and session layer between the UI and the ADK supervisor.
 ### `infra/`
 
 Cloud Run for web/API and agent runtime, Firestore for production-domain state, Secret Manager for credentials, Grafana Cloud MCP for runtime observability access. Keep infrastructure intentionally small; Kubernetes needs a demonstrated requirement.
+
+Dependencies are declared in `../pyproject.toml`. `requirements.txt` is generated from the lock for the Cloud Run Python buildpack, which reads that file rather than `pyproject.toml`:
+
+```sh
+uv lock && uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o requirements.txt
+```
+
+Secrets are mounted as environment variables by Cloud Run, so no Secret Manager client library is needed at runtime.
