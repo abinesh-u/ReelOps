@@ -45,7 +45,7 @@ Sentinel    Investigator  Impact   Response Verify
 
 ## Where things live
 
-Each top-level directory carries a README that owns its domain. Engineering constraints, working rules, and the build order: `AGENTS.md`.
+Engineering constraints, working rules, and the build order live in `AGENTS.md`. Design specs live in `docs/`; a directory earns its own doc once it has code and a convention the code cannot show.
 
 ## Current status
 

@@ -36,7 +36,7 @@ The delay figure comes from simulated state at run time.
 - reallocate available render capacity
 - escalate to the VFX on-call owner
 
-A human approves before execution. See `action_gateway/README.md`.
+A human approves before execution. See `architecture.md`.
 
 ## Verification
 

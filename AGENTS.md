@@ -15,10 +15,10 @@ Built for the Agentic Cinema hackathon (Grafana track) and maintained as a portf
 ## Hard constraints
 
 - **Models and agent orchestration: Gemini and Google ADK only.** Any other model provider or agent framework breaks the hackathon rules.
-- **Deployment: Google Cloud.** Cloud Run, Firestore, Secret Manager — see `infra/README.md`.
+- **Deployment: Google Cloud.** Cloud Run, Firestore, Secret Manager — see `docs/architecture.md`.
 - **Grafana Cloud MCP does real work at runtime.** Agents obtain evidence and perform operations through it; it is the partner integration the project is judged on.
 - **Ordinary infrastructure is unconstrained.** Web frameworks, databases, testing and UI libraries are free choices.
-- **Consequential actions pass through the Action Gateway and require human approval** — see `action_gateway/README.md`.
+- **Consequential actions pass through the Action Gateway and require human approval** — see `docs/architecture.md`.
 - **The product is named ReelOps** in code, docs, UI, and screenshots.
 - **Secrets come from environment variables or Secret Manager**, and stay out of commits and logs.
 
@@ -28,7 +28,7 @@ Built for the Agentic Cinema hackathon (Grafana track) and maintained as a portf
 
 > Firestore tells us what the production system *means*. Grafana tells us what the system is *experiencing*.
 
-Gemini/ADK connects the two. Keep domain semantics in Firestore (`docs/domain-model.md`) and empirical runtime state in Grafana (`telemetry/`).
+Gemini/ADK connects the two. Keep domain semantics in Firestore (`docs/domain-model.md`) and empirical runtime state in Grafana (`docs/telemetry-contract.md`).
 
 ---
 
@@ -51,7 +51,7 @@ These apply to every change, in every module.
 
 ## Agents and their permissions
 
-Six purposeful agents, one question each. Responsibilities and prompt requirements: `agents/README.md`.
+Six purposeful agents, one question each. Responsibilities and prompt requirements: `docs/agents.md`.
 
 | Agent | Question | Access |
 | --- | --- | --- |
@@ -124,18 +124,14 @@ Completion bar for the MVP: `docs/roadmap.md`.
 
 | When you are working on | Read |
 | --- | --- |
-| any change | this file, then the module's README |
-| the simulator or a failure mode | `simulator/README.md`, `docs/golden-scenario.md` |
-| metrics, logs, or traces | `telemetry/metrics.md`, `telemetry/logs.md`, `telemetry/traces.md` |
-| an agent, its prompt, or its output schema | `agents/README.md`, `agents/contracts.py`, `agents/state.py` |
+| the simulator or a failure mode | `docs/golden-scenario.md`, `docs/architecture.md` |
+| metrics, logs, or traces | `docs/telemetry-contract.md` |
+| an agent, its prompt, or its output schema | `docs/agents.md`, `agents/contracts.py`, `agents/state.py` |
 | impact, dependencies, or schedule logic | `docs/domain-model.md` |
-| actions, approval, or execution | `action_gateway/README.md` |
-| the control tower UI | `frontend/README.md` |
-| deployment or Google Cloud config | `infra/README.md` |
+| actions, approval, the UI, deployment, or a design trade-off | `docs/architecture.md` |
 | scoring, scenarios, or ground truth | `evals/README.md`, `evals/scenarios.yaml` |
 | anything touching tool privilege or mutation | `docs/threat-model.md` |
 | the demo | `docs/demo-runbook.md` |
-| an architectural trade-off | `docs/architecture.md` |
 
 Also read the tests currently covering the area, and add tests for behavior rather than implementation trivia.
 
