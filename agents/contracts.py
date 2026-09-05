@@ -1,9 +1,15 @@
 from typing import Literal, TypedDict
 
+from pydantic import BaseModel, Field
+
 Severity = Literal["low", "medium", "high", "critical"]
 
 
-class AnomalyContract(TypedDict):
+class AnomalyContract(BaseModel):
+    """Sentinel's output. A Pydantic model, not a TypedDict: ADK's `output_schema`
+    requires one — see `agents/sentinel/agent.py`.
+    """
+
     anomaly: bool
     severity: Severity
     service: str
@@ -11,9 +17,15 @@ class AnomalyContract(TypedDict):
     current: float
     baseline: float
     confidence: float
+    evidence: list[str] = Field(
+        description="One entry per query that supports this verdict, formatted as "
+        "'<PromQL expr>: observed=<value> vs baseline=<value>'."
+    )
 
 
-class RootCauseContract(TypedDict):
+class RootCauseContract(BaseModel):
+    """Investigator's output. A Pydantic model for the same reason as `AnomalyContract`."""
+
     category: str
     service: str
     confidence: float

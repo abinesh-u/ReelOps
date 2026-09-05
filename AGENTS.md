@@ -41,7 +41,7 @@ These apply to every change, in every module.
 - **Derive every number at run time** from simulated state and telemetry — predicted delays, risk levels, recovery verdicts. A demo figure written into agent logic is a bug.
 - **A metric that returns nothing reads as a healthy system.** Verify a name against what the exporter actually publishes before writing a query against it; the two duration metrics are histograms and carry no series under their own names.
 - **Deadline risk is inferred by ReelOps**, never published as a source metric.
-- **The demo path uses the real Grafana MCP integration.** Keep external integrations behind a clear interface, with mock and test adapters in separate modules that production code paths never reach.
+- **Production code paths always call the live Grafana MCP server.** Keep external integrations behind a clear interface, with mock and test adapters in separate modules those paths never reach.
 - **Fail loudly when required configuration is absent.** A missing token surfaces as an error, not a silent fallback.
 - **The simulator is deterministic under a seed**, so a scenario replays identically.
 - **Policy and state transitions live in code.** Prompts interpret evidence and select tool steps; authorization and stage transitions do not depend on model output.
@@ -108,14 +108,14 @@ Full detail: `docs/golden-scenario.md`. Ideas beyond this loop — more incident
 
 ## Phases
 
-Build in this order. **Current: Phase 4.**
+Build in this order. **Current: Phase 5.**
 
 ```text
 1. Simulator          ingest / VFX / render / editorial, render-worker degradation first  ← done
 2. Telemetry          metrics, logs, traces; healthy vs degraded visibly differ in Grafana  ← done
 3. Grafana wiring     validate MCP connectivity with a minimal tool-calling test  ← done
-4. Sentinel + Investigator    anomaly → evidence → root cause  ← current
-5. Impact Analyst     root cause → downstream production risk
+4. Sentinel + Investigator    anomaly → evidence → root cause  ← done
+5. Impact Analyst     root cause → downstream production risk  ← current
 6. Response + approval        bounded actions behind the Action Gateway
 7. Verification       post-action telemetry closes the loop
 8. UI                 control tower around the golden path

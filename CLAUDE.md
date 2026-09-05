@@ -26,7 +26,20 @@ TELEMETRY_ENABLED=true TELEMETRY_CONSOLE=true uv run python -m simulator
 
 # The live Grafana MCP gate. Needs mcp-grafana and the simulator both running;
 # the launch command for mcp-grafana lives in docs/grafana-setup.md.
-REELOPS_LIVE_MCP=1 uv run pytest tests/test_grafana_live.py -q
+REELOPS_LIVE_MCP=1 uv run pytest tests/live/test_grafana_live.py -q
+
+# The live Gemini/Vertex gate — a real ADK LlmAgent call. GOOGLE_GENAI_USE_VERTEXAI
+# etc. must be exported into process env first; see the environment trap below.
+export GOOGLE_GENAI_USE_VERTEXAI="$(grep '^GOOGLE_GENAI_USE_VERTEXAI=' .env | cut -d= -f2-)"
+export GOOGLE_CLOUD_PROJECT="$(grep '^GOOGLE_CLOUD_PROJECT=' .env | cut -d= -f2-)"
+export GOOGLE_CLOUD_LOCATION="$(grep '^GOOGLE_CLOUD_LOCATION=' .env | cut -d= -f2-)"
+REELOPS_LIVE_MODEL=1 uv run pytest tests/live/test_agent_smoke.py -q
+
+# Sentinel and Investigator against the real stack (same env exports as above).
+# The golden-scenario test injects the fault itself and needs SIMULATOR_URL
+# reachable (default http://localhost:8090).
+REELOPS_LIVE_MODEL=1 REELOPS_LIVE_MCP=1 uv run pytest tests/live/test_sentinel_live.py tests/live/test_investigator_live.py -q
+REELOPS_LIVE_MODEL=1 REELOPS_LIVE_MCP=1 uv run pytest tests/live/test_golden_scenario_live.py -q
 ```
 
 `requirements.txt` is generated for the Cloud Run buildpack, never hand-edited. After changing `pyproject.toml`:
@@ -42,6 +55,7 @@ Ports: simulator `8090`, Action Gateway `8080`, Grafana MCP `8000`.
 - **The `[mcp]` extra on `google-adk` is load-bearing.** Bare `google-adk` does not declare `mcp`, so the resolver picks mcp 2.x, which dropped `ProgressFnT` and breaks `McpToolset` at import. The extra pins `mcp>=1.24,<2`.
 - **Packages have no `__init__.py`.** `[tool.uv] package = false` plus pytest's `pythonpath = ["."]` is what makes `simulator` and `agents` importable from the repo root. Adding a `[tool.setuptools]` packages list breaks test collection.
 - **`mcp-grafana` is a separate process that reads process environment, never `.env`** — and `.env` must not be shell-sourced. `set -a; . ./.env` exits **0** and silently truncates `OTEL_EXPORTER_OTLP_HEADERS` to `Authorization=Basic`, because the value contains a space: the rest is parsed as a command. The credential is dropped with no error anywhere. Use the prefix-scoped extraction in the launch line in `docs/grafana-setup.md`, which is the only place that command lives.
+- **The same trap applies to Gemini/Vertex.** `google.genai.Client` (built internally by ADK's `Gemini` model class) reads `GOOGLE_GENAI_USE_VERTEXAI`/`GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION` from process environment, not `.env` — `agents/config.py`'s `ModelSettings` parses `.env` directly via `pydantic-settings`, so `ModelSettings().require_vertex()` can report "complete" while the actual API client sees none of it and fails with `ValueError: No API key was provided` (it silently falls back to AI Studio's API-key path). Export the three vars into process env first — see the launch line in `CLAUDE.md`'s Commands section.
 - **No `asyncio_mode` is configured.** Async tests need an explicit `@pytest.mark.asyncio`, and async *fixtures* need `@pytest_asyncio.fixture` — a plain `@pytest.fixture` on an async fixture errors at setup rather than running.
 - **Settings tests must pass `_env_file=None`.** `GrafanaSettings` and `TelemetrySettings` read `.env`; once it is populated, a fail-loud test that omits this picks up real values and silently stops asserting anything.
 - `timeout` is not available in this shell.
