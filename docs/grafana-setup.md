@@ -34,7 +34,25 @@ OTEL_SERVICE_NAME=reelops-simulator
 
 `OTEL_EXPORTER_OTLP_HEADERS` carries a credential. It belongs in `.env` and Secret Manager, never in a commit.
 
-## 3. Create a service account token
+Then start the simulator with export on:
+
+```sh
+TELEMETRY_ENABLED=true uv run python -m simulator
+```
+
+Without a stack yet, `TELEMETRY_CONSOLE=true` prints the same records to stdout,
+and `uv run pytest tests/test_telemetry.py` asserts the export path in memory.
+
+## 3. Import the dashboard
+
+`dashboards/reelops-render.json` covers the five golden-scenario signals plus
+the log panel. In Grafana: **Dashboards → New → Import → Upload JSON file**, then
+pick your Prometheus and Loki data sources when prompted.
+
+Its panel queries are the reference PromQL and LogQL. Phase 4's agents are
+written against them, so a query that works here is a query an agent can use.
+
+## 4. Create a service account token
 
 In your Grafana stack: **Administration → Users and access → Service accounts → Add service account**.
 
@@ -42,7 +60,7 @@ Give it the **Viewer** role for the read path. Add the narrower write permission
 
 **Add service account token**, copy it once, and store it as `GRAFANA_SERVICE_ACCOUNT_TOKEN`.
 
-## 4. Run the MCP server
+## 5. Run the MCP server
 
 Locally, with least privilege — read-only, and only the tool categories the golden path uses:
 
@@ -71,7 +89,7 @@ On Cloud Run, deploy this as a sidecar container in the same service, with the t
 
 Phase 6 needs the write path. Run a second instance without `--disable-write`, reachable only from the Response agent, so the read-only agents keep a read-only server.
 
-## 5. Verify — the real gate
+## 6. Verify — the real gate
 
 A health check proves the process booted, not that the setup works. Phase 3 is done when a tool call returns live data.
 
@@ -97,6 +115,23 @@ asyncio.run(main())
 ```
 
 The gate is a PromQL query through the MCP server that returns a **non-empty** series for a metric the simulator actually emitted — `render_queue_depth` is the one to try. An empty result means telemetry is not arriving, and no amount of agent work will fix it.
+
+Phase 2's own gate comes first, and needs no MCP: run a healthy take, inject the
+fault, and confirm the dashboard shows queue depth climbing while available
+workers drop to 7 and p95 duration rises.
+
+```sh
+TELEMETRY_ENABLED=true SIM_SPEED=20 uv run python -m simulator
+curl -sX POST localhost:8090/sim/inject/render-worker-degradation \
+  -H 'content-type: application/json' -d '{"workers":5}'
+```
+
+`SIM_SPEED=20` plays the 90 sim-minute window over 4.5 real minutes, which at
+the default 5-second export interval is ~54 points per series — enough for a
+readable slope. At `SIM_SPEED=60` the same window yields 18.
+
+Remember the histograms: `render_job_duration_seconds` has no series under its
+own name, only `_bucket`/`_sum`/`_count`. See `telemetry-contract.md`.
 
 If Phase 6 has enabled the write path, confirm `create_incident` is reachable before trusting the approval flow.
 

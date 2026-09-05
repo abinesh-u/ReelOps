@@ -17,14 +17,17 @@ from simulator import events as ev
 from simulator.config import SimulatorSettings
 from simulator.events import EventLog, SimEvent
 from simulator.models import (
+    JobAttempt,
     JobStatus,
     RenderJob,
     RenderWorker,
     Scene,
+    SceneReview,
     Shot,
     ShotStatus,
     WorkerState,
 )
+from simulator.streams import BoundedStream
 
 SERVICE = "render-farm"
 EDITORIAL_SERVICE = "editorial"
@@ -53,8 +56,19 @@ class RenderPipeline:
         self._job_seq = 0
         # (elapsed_seconds, frames) pairs inside the throughput window.
         self._frame_events: deque[tuple[float, int]] = deque()
-        self.render_durations: deque[float] = deque(maxlen=settings.sample_buffer_size)
-        self.vfx_latencies: deque[float] = deque(maxlen=settings.sample_buffer_size)
+        self.render_durations: BoundedStream[float] = BoundedStream(
+            settings.sample_buffer_size, name="render_durations"
+        )
+        self.vfx_latencies: BoundedStream[float] = BoundedStream(
+            settings.sample_buffer_size, name="vfx_latencies"
+        )
+        self.scene_reviews: BoundedStream[SceneReview] = BoundedStream(
+            settings.sample_buffer_size, name="scene_reviews"
+        )
+        # Per-attempt timelines, drained by the telemetry exporter to build traces.
+        self.job_attempts: BoundedStream[JobAttempt] = BoundedStream(
+            settings.sample_buffer_size, name="job_attempts"
+        )
 
         self._reviewing_scene: str | None = None
         self._review_remaining = 0.0
@@ -201,6 +215,7 @@ class RenderPipeline:
         self.render_durations.append(duration)
         self._frame_events.append((self._elapsed, job.frames))
         self._log(ev.RENDER_COMPLETED, now, job=job, worker=worker, duration_s=duration)
+        self._record_attempt(worker, job, now, "completed", duration)
 
         shot = self.shots[job.shot_id] if job.shot_id else None
         if shot is not None:
@@ -231,6 +246,7 @@ class RenderPipeline:
             error_code="render_timeout",
             duration_s=worker.job_elapsed_seconds,
         )
+        self._record_attempt(worker, job, now, "timeout", worker.job_elapsed_seconds)
         if job.attempts >= self._settings.max_job_attempts:
             # The shot is in trouble and says so, but the work is still needed:
             # abandoning it would strand the scene forever and make the
@@ -298,7 +314,18 @@ class RenderPipeline:
         if self._reviewing_scene is not None:
             self._review_remaining -= dt
             if self._review_remaining <= 0:
-                self.scenes[self._reviewing_scene].review_status = "approved"
+                scene = self.scenes[self._reviewing_scene]
+                scene.review_status = "approved"
+                if scene.ready_at and scene.review_started_at:
+                    self.scene_reviews.append(
+                        SceneReview(
+                            scene_id=scene.scene_id,
+                            ready_at=scene.ready_at,
+                            started_at=scene.review_started_at,
+                            completed_at=now,
+                            shots=len(scene.shots),
+                        )
+                    )
                 self._reviewing_scene = None
 
         if self._reviewing_scene is None:
@@ -308,6 +335,7 @@ class RenderPipeline:
                 self._reviewing_scene = scene.scene_id
                 self._review_remaining = EDITORIAL_REVIEW_SECONDS
                 scene.review_status = "in_review"
+                scene.review_started_at = now
 
     def _review_queue(self) -> list[Scene]:
         return [s for s in self.scenes.values() if s.vfx_ready and s.review_status == "pending"]
@@ -388,6 +416,28 @@ class RenderPipeline:
         return scene.ready_at
 
     # -- internals --------------------------------------------------------
+
+    def _record_attempt(
+        self, worker: RenderWorker, job: RenderJob, now: datetime, outcome: str, duration: float
+    ) -> None:
+        if job.queued_at is None or job.started_at is None:
+            return
+        self.job_attempts.append(
+            JobAttempt(
+                job_id=job.job_id,
+                scene_id=job.scene_id,
+                shot_id=job.shot_id,
+                worker_id=worker.worker_id,
+                trace_id=job.trace_id,
+                outcome=outcome,
+                attempt=job.attempts,
+                frames=job.frames,
+                queued_at=job.queued_at,
+                started_at=job.started_at,
+                ended_at=now,
+                duration_seconds=duration,
+            )
+        )
 
     def _log(
         self,
