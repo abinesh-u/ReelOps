@@ -256,15 +256,17 @@ def test_derived_trace_id_keeps_the_sim_id_in_its_low_bits() -> None:
 
 
 def test_missing_endpoint_fails_loudly() -> None:
-    settings = TelemetrySettings(telemetry_enabled=True)
+    # _env_file=None or this asserts nothing once a real .env exists: the
+    # populated endpoint would be picked up and the raise would never happen.
+    settings = TelemetrySettings(_env_file=None, telemetry_enabled=True)
     with pytest.raises(TelemetryConfigError, match="OTEL_EXPORTER_OTLP_ENDPOINT"):
         settings.require_export_target()
 
 
 def test_console_mode_needs_no_endpoint() -> None:
-    settings = TelemetrySettings(telemetry_enabled=True, telemetry_console=True)
+    settings = TelemetrySettings(_env_file=None, telemetry_enabled=True, telemetry_console=True)
     settings.require_export_target()
 
 
 def test_disabled_telemetry_is_not_checked() -> None:
-    TelemetrySettings(telemetry_enabled=False).require_export_target()
+    TelemetrySettings(_env_file=None, telemetry_enabled=False).require_export_target()

@@ -14,3 +14,8 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# mcp-grafana runtime artefacts. The log carries request paths including the
+# datasource UID, so it stays out of commits.
+.mcp-grafana.log
+.mcp-grafana.pid
