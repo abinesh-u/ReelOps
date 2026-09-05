@@ -16,6 +16,9 @@ class IncidentState:
     project_id: str
     status: str = "new"
     severity: str = "unknown"
+    # Phase 5+: narrow to AnomalyContract/RootCauseContract (agents/contracts.py)
+    # once a supervisor assembles IncidentState end-to-end. Nothing writes into
+    # these slots yet — Phase 4's run_sentinel/run_investigator run standalone.
     anomaly: dict[str, Any] = field(default_factory=dict)
     evidence: list[Evidence] = field(default_factory=list)
     root_cause: dict[str, Any] = field(default_factory=dict)

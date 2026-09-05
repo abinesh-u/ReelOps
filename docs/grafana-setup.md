@@ -191,7 +191,7 @@ With the simulator running and emitting, the gate is a test rather than a
 command to eyeball:
 
 ```sh
-REELOPS_LIVE_MCP=1 uv run pytest tests/test_grafana_live.py -q
+REELOPS_LIVE_MCP=1 uv run pytest tests/live/test_grafana_live.py -q
 ```
 
 It is opt-in by that flag, not by the presence of `GRAFANA_URL` — otherwise an
